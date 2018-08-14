@@ -64,11 +64,14 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 		LinkExistingSingletonActors(op.Data.singleton_name_to_entity_id());
 	});
 
-	View->OnComponentUpdate<improbable::unreal::GlobalStateManager>([this](const worker::ComponentUpdateOp<improbable::unreal::GlobalStateManager>& op)
+	View->OnComponentUpdate<improbable::unreal::GlobalStateManager>([this, View](const worker::ComponentUpdateOp<improbable::unreal::GlobalStateManager>& op)
 	{
 		if (op.Update.singleton_name_to_entity_id().data())
 		{
-			LinkExistingSingletonActors(*op.Update.singleton_name_to_entity_id().data());
+			if(View->GetAuthority<improbable::unreal::GlobalStateManager>(op.EntityId) != worker::Authority::kAuthoritative)
+			{
+				LinkExistingSingletonActors(*op.Update.singleton_name_to_entity_id().data());
+			}
 		}
 	});
 
@@ -77,6 +80,10 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 		if (op.Authority == worker::Authority::kAuthoritative)
 		{
 			ExecuteInitialSingletonActorReplication(*GetSingletonNameToEntityId());
+		}
+		else if(op.Authority == worker::Authority::kNotAuthoritative)
+		{
+		
 		}
 	});
 
@@ -783,21 +790,26 @@ void USpatialInterop::LinkExistingSingletonActors(const NameToEntityIdMap& Singl
 	{
 		FEntityId SingletonEntityId{ Pair.second };
 
+		AActor* SingletonActor = nullptr;
+		USpatialActorChannel* Channel = nullptr;
+		GetSingletonActorAndChannel(UTF8_TO_TCHAR(Pair.first.c_str()), SingletonActor, Channel);
+
+		SingletonActor->Role = ROLE_SimulatedProxy;
+		SingletonActor->RemoteRole = ROLE_Authority;
+
 		// Singleton Entity hasn't been created yet
 		if (SingletonEntityId == FEntityId{})
 		{
 			continue;
 		}
 
-		AActor* SingletonActor = nullptr;
-		USpatialActorChannel* Channel = nullptr;
-		GetSingletonActorAndChannel(UTF8_TO_TCHAR(Pair.first.c_str()), SingletonActor, Channel);
 
 		// Singleton wasn't found or channel is already set up
 		if (Channel == nullptr || Channel->Actor != nullptr)
 		{
 			continue;
 		}
+
 
 		// Add to entity registry
 		// This indirectly causes SetChannelActor to not create a new entity for this actor
@@ -850,6 +862,9 @@ void USpatialInterop::ExecuteInitialSingletonActorReplication(const NameToEntity
 		{
 			continue;
 		}
+
+		SingletonActor->Role = ROLE_Authority;
+		SingletonActor->RemoteRole = ROLE_SimulatedProxy;
 
 		// Set entity id of channel from the GlobalStateManager.
 		// If the id was 0, SetChannelActor will create the entity.
@@ -934,4 +949,22 @@ NameToEntityIdMap* USpatialInterop::GetSingletonNameToEntityId() const
 	}
 
 	return nullptr;
+}
+
+void USpatialInterop::ClientIsAutonomousProxy(worker::EntityId EntityId)
+{
+	if(NetDriver->InteropPipelineBlock->bInCriticalSection)
+	{
+		QueuedClientAuthorities.Add(EntityId);
+	}
+	else
+	{
+		ClientIsAutonomousProxyImpl(EntityId);
+	}
+}
+
+void USpatialInterop::ClientIsAutonomousProxyImpl(worker::EntityId EntityId)
+{
+	AActor* Actor = NetDriver->GetEntityRegistry()->GetActorFromEntityId(FEntityId(EntityId));
+	Actor->Role = ROLE_AutonomousProxy;
 }

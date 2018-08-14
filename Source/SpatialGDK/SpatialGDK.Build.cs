@@ -13,6 +13,8 @@ public class SpatialGDK : ModuleRules
     public SpatialGDK(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+        MinFilesUsingPrecompiledHeaderOverride = 1;
+        bFasterWithoutUnity = true;
 
         PublicIncludePaths.AddRange(
             new string[]

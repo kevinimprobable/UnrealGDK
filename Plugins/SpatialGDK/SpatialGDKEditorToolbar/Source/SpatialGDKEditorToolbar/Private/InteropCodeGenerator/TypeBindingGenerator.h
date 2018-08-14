@@ -78,3 +78,5 @@ void GenerateFunction_SendRPC(FCodeWriter& SourceWriter, UClass* Class, const TS
 void GenerateFunction_OnRPCPayload(FCodeWriter& SourceWriter, UClass* Class, const TSharedPtr<FUnrealRPC> RPC);
 void GenerateFunction_RPCOnCommandResponse(FCodeWriter& SourceWriter, UClass* Class, const TSharedPtr<FUnrealRPC> RPC);
 void GetPropertyChainListsAsStrings(const TSharedPtr<FUnrealProperty>& Prop, FString& OutNames, FString& OutIndicies);
+
+void GenerateFunction_IsClientAutonomousProxy(FCodeWriter& SourceWriter, UClass* Class);

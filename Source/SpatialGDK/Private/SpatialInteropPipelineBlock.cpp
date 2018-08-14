@@ -127,7 +127,7 @@ void USpatialInteropPipelineBlock::RemoveComponent(const worker::ComponentId Com
 void USpatialInteropPipelineBlock::ChangeAuthority(const worker::ComponentId ComponentId,
 	const worker::AuthorityChangeOp& AuthChangeOp)
 {
-	UE_LOG(LogSpatialGDKInteropPipelineBlock, Verbose, TEXT("USpatialInteropPipelineBlock: worker::ChangeAuthorityOp component ID: %u entity ID: %lld inCriticalSection: %d"),
+	UE_LOG(LogSpatialGDKInteropPipelineBlock, Warning, TEXT("USpatialInteropPipelineBlock: worker::ChangeAuthorityOp component ID: %u entity ID: %lld inCriticalSection: %d"),
 		ComponentId, AuthChangeOp.EntityId, (int)bInCriticalSection);
 
 	// When a component is initialised, the callback dispatcher will automatically deal with authority changes. Therefore, we need
@@ -136,11 +136,15 @@ void USpatialInteropPipelineBlock::ChangeAuthority(const worker::ComponentId Com
 	{
 		PendingAuthorityChanges.Emplace(FComponentIdentifier{AuthChangeOp.EntityId, ComponentId}, AuthChangeOp);
 	}
+	else
+	{
+		ChangeAuthorityImpl(TPair<FComponentIdentifier, worker::AuthorityChangeOp>{FComponentIdentifier{AuthChangeOp.EntityId, ComponentId}, AuthChangeOp});
+	}
 
 	if (NextBlock)
 	{
 		NextBlock->ChangeAuthority(ComponentId, AuthChangeOp);
-	}
+}
 }
 
 void USpatialInteropPipelineBlock::EnterCriticalSection()
@@ -187,6 +191,17 @@ void USpatialInteropPipelineBlock::LeaveCriticalSection()
 		RemoveEntityImpl(PendingRemoveEntity);
 	}
 
+	for (auto& PendingAuthorityChange : PendingAuthorityChanges)
+	{
+		ChangeAuthorityImpl(PendingAuthorityChange);
+	}
+
+	USpatialInterop* Interop = NetDriver->GetSpatialInterop();
+	for(auto& EntityId : Interop->QueuedClientAuthorities)
+	{
+		Interop->ClientIsAutonomousProxyImpl(EntityId);
+	}
+
 	NetDriver->GetSpatialInterop()->OnLeaveCriticalSection();
 
 	// Mark that we've left the critical section.
@@ -196,6 +211,7 @@ void USpatialInteropPipelineBlock::LeaveCriticalSection()
 	PendingAuthorityChanges.Empty();
 	PendingRemoveComponents.Empty();
 	PendingRemoveEntities.Empty();
+	Interop->QueuedClientAuthorities.Empty();
 
 	if (NextBlock)
 	{
@@ -262,6 +278,42 @@ void USpatialInteropPipelineBlock::DisableComponentImpl(const FComponentIdentifi
 			Component->Disable(ComponentIdentifier.EntityId, NetDriver->GetSpatialOS()->GetCallbackDispatcher());
 		}
 	}
+}
+
+void USpatialInteropPipelineBlock::ChangeAuthorityImpl(const TPair<FComponentIdentifier, worker::AuthorityChangeOp>& pair)
+{
+	AActor* Actor = EntityRegistry->GetActorFromEntityId(pair.Key.EntityId);
+
+	if(Actor == nullptr)
+	{
+		return;
+	}
+
+	if(NetDriver->IsServer())
+	{
+		TSharedPtr<worker::View> LockedView = NetDriver->GetSpatialOS()->GetView().Pin();
+		worker::Authority Authority = LockedView->GetAuthority<improbable::Position>(pair.Key.EntityId);
+
+		if(Authority == worker::Authority::kAuthoritative)
+		{
+			Actor->Role = ROLE_Authority;
+			Actor->RemoteRole = ROLE_SimulatedProxy;
+		}
+		else if(Authority == worker::Authority::kNotAuthoritative)
+		{
+			Actor->Role = ROLE_SimulatedProxy;
+			Actor->RemoteRole = ROLE_Authority;
+		}
+	}
+	//else
+	//{
+	//	USpatialTypeBinding* Binding = NetDriver->GetSpatialInterop()->GetTypeBindingByClass(Actor->GetClass());
+	//	if(Binding->IsClientAutonomousProxy(pair.Key.EntityId))
+	//	{
+	//		Actor->Role = ROLE_AutonomousProxy;
+	//		Actor->RemoteRole = ROLE_Authority;
+	//	}
+	//}
 }
 
 void USpatialInteropPipelineBlock::RemoveEntityImpl(const FEntityId& EntityId)
@@ -372,6 +424,10 @@ void USpatialInteropPipelineBlock::CreateActor(TSharedPtr<worker::Connection> Lo
 		
 		// actor channel/entity mapping should be registered by this point
 		check(NetDriver->GetSpatialInterop()->GetActorChannelByEntityId(EntityId.ToSpatialEntityId()));
+
+		// Assume SimulatedProxy until we've been delegated Authority
+		EntityActor->Role = ROLE_SimulatedProxy;
+		EntityActor->RemoteRole = ROLE_Authority;
 	}
 	else
 	{
@@ -471,6 +527,10 @@ void USpatialInteropPipelineBlock::CreateActor(TSharedPtr<worker::Connection> Lo
 
 			// Update interest on the entity's components after receiving initial component data (so Role and RemoteRole are properly set).
 			NetDriver->GetSpatialInterop()->SendComponentInterests(Channel, EntityId.ToSpatialEntityId());
+
+			// Assume SimulatedProxy until we're delegated Authority
+			EntityActor->Role = ROLE_SimulatedProxy;
+			EntityActor->RemoteRole = ROLE_Authority;
 
 			// This is a bit of a hack unfortunately, among the core classes only PlayerController implements this function and it requires
 			// a player index. For now we don't support split screen, so the number is always 0.

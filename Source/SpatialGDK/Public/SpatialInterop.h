@@ -220,6 +220,11 @@ public:
 	bool IsSingletonClass(UClass* Class);
 	NameToEntityIdMap* GetSingletonNameToEntityId() const;
 
+	void ClientIsAutonomousProxy(worker::EntityId EntityId);
+	void ClientIsAutonomousProxyImpl(worker::EntityId EntityId);
+
+	TArray<worker::EntityId> QueuedClientAuthorities;
+
 	// Accessors.
 	USpatialOS* GetSpatialOS() const
 	{

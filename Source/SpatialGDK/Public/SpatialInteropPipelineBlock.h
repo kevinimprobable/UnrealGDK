@@ -65,9 +65,9 @@ public:
 
 	bool IsInCriticalSection() const { return bInCriticalSection; }
 
-private:
 	bool bInCriticalSection;
 
+private:
 	UPROPERTY()
 	TArray<FEntityId> PendingAddEntities;
 
@@ -98,6 +98,7 @@ private:
 	void AddEntityImpl(const FEntityId& EntityId);
 	void InitialiseNewComponentImpl(const FComponentIdentifier& ComponentIdentifier, UAddComponentOpWrapperBase* AddComponentOp);
 	void DisableComponentImpl(const FComponentIdentifier& ComponentIdentifier);
+	void ChangeAuthorityImpl(const TPair<FComponentIdentifier, worker::AuthorityChangeOp>& op);
 	void RemoveEntityImpl(const FEntityId& EntityId);
 
 	// Stub.

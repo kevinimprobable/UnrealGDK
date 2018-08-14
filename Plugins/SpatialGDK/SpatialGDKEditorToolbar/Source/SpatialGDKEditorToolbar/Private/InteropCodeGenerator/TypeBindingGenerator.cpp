@@ -558,7 +558,9 @@ void GenerateTypeBindingHeader(FCodeWriter& HeaderWriter, FString SchemaFilename
 		void SendRPCCommand(UObject* TargetObject, const UFunction* const Function, void* Parameters) override;
 
 		void ReceiveAddComponent(USpatialActorChannel* Channel, UAddComponentOpWrapperBase* AddComponentOp) const override;
-		worker::Map<worker::ComponentId, worker::InterestOverride> GetInterestOverrideMap(bool bIsClient, bool bAutonomousProxy) const override;)""");
+		worker::Map<worker::ComponentId, worker::InterestOverride> GetInterestOverrideMap(bool bIsClient, bool bAutonomousProxy) const override;
+
+		bool IsClientAutonomousProxy(worker::EntityId Id) override;)""");
 
 	HeaderWriter.PrintNewLine();
 
@@ -768,6 +770,9 @@ void GenerateTypeBindingSource(FCodeWriter& SourceWriter, FString SchemaFilename
 	GenerateFunction_GetInterestOverrideMap(SourceWriter, Class);
 
 	SourceWriter.PrintNewLine();
+	GenerateFunction_IsClientAutonomousProxy(SourceWriter, Class);
+
+	SourceWriter.PrintNewLine();
 	GenerateFunction_BuildSpatialComponentUpdate(SourceWriter, Class);
 
 	for (EReplicatedPropertyGroup Group : GetAllReplicatedPropertyGroups())
@@ -948,8 +953,7 @@ void GenerateFunction_BindToView(FCodeWriter& SourceWriter, UClass* Class, const
 	SourceWriter.Print("TSharedPtr<worker::View> View = Interop->GetSpatialOS()->GetView().Pin();");
 	SourceWriter.Print("ViewCallbacks.Init(View);");
 	SourceWriter.PrintNewLine();
-	SourceWriter.Print("if (Interop->GetNetDriver()->GetNetMode() == NM_Client)");
-	SourceWriter.BeginScope();
+
 	for (EReplicatedPropertyGroup Group : GetAllReplicatedPropertyGroups())
 	{
 		SourceWriter.Printf("ViewCallbacks.Add(View->OnComponentUpdate<%s>([this](",
@@ -973,6 +977,7 @@ void GenerateFunction_BindToView(FCodeWriter& SourceWriter, UClass* Class, const
 		SourceWriter.Outdent();
 		SourceWriter.Print("}));");
 	}
+
 	SourceWriter.Printf("if (!bIsClient)");
 	SourceWriter.BeginScope();
 	SourceWriter.Printf("ViewCallbacks.Add(View->OnComponentUpdate<%s>([this](", *SchemaHandoverDataName(Class, true));
@@ -993,6 +998,18 @@ void GenerateFunction_BindToView(FCodeWriter& SourceWriter, UClass* Class, const
 	SourceWriter.Outdent();
 	SourceWriter.Print("}));");
 	SourceWriter.End();
+
+	SourceWriter.Printf("if (bIsClient)");
+	SourceWriter.BeginScope();
+	SourceWriter.Printf("ViewCallbacks.Add(View->OnAuthorityChange<%s>([this](", *SchemaRPCComponentName(ERPCType::RPC_Client, Class, true));
+	SourceWriter.Indent();
+	SourceWriter.Printf("const worker::AuthorityChangeOp& Op)");
+	SourceWriter.Outdent();
+	SourceWriter.BeginScope();
+	SourceWriter.Print(R"""(
+		Interop->ClientIsAutonomousProxy(Op.EntityId);)""");
+	SourceWriter.Outdent();
+	SourceWriter.Print("}));");
 	SourceWriter.End();
 
 	// Multicast RPCs
@@ -1699,6 +1716,9 @@ void GenerateBody_ReceiveUpdate_RepDataProperty(FCodeWriter& SourceWriter, uint1
 	// If the property is Role or RemoteRole, ensure to swap on the client.
 	if (PropertyInfo->ReplicationData->RoleSwapHandle != -1)
 	{
+		SourceWriter.End();
+		SourceWriter.End();
+		return;
 		SourceWriter.Printf(R"""(
 			// On the client, we need to swap Role/RemoteRole.
 			if (!bIsServer)
@@ -1790,17 +1810,17 @@ void GenerateBody_ReceiveUpdate_RepDataProperty(FCodeWriter& SourceWriter, uint1
 	}, false);
 
 	// If this is RemoteRole, make sure to downgrade if bAutonomousProxy is false.
-	if (Property->GetFName() == NAME_RemoteRole)
-	{
-		SourceWriter.PrintNewLine();
-		SourceWriter.Print(R"""(
-			// Downgrade role from AutonomousProxy to SimulatedProxy if we aren't authoritative over
-			// the server RPCs component.
-			if (!bIsServer && Value == ROLE_AutonomousProxy && !bAutonomousProxy)
-			{
-				Value = ROLE_SimulatedProxy;
-			})""");
-	}
+	//if (Property->GetFName() == NAME_RemoteRole)
+	//{
+	//	SourceWriter.PrintNewLine();
+	//	SourceWriter.Print(R"""(
+	//		// Downgrade role from AutonomousProxy to SimulatedProxy if we aren't authoritative over
+	//		// the server RPCs component.
+	//		if (!bIsServer && Value == ROLE_AutonomousProxy && !bAutonomousProxy)
+	//		{
+	//			Value = ROLE_SimulatedProxy;
+	//		})""");
+	//}
 
 	SourceWriter.PrintNewLine();
 
@@ -2238,4 +2258,29 @@ void GetPropertyChainListsAsStrings(const TSharedPtr<FUnrealProperty>& Prop, FSt
 		return FString::FromInt(PropertyInfo->StaticArrayIndex);
 	});
 	OutIndicies = FString::Join(PropertyChainIndices, TEXT(", "));
+}
+
+void GenerateFunction_IsClientAutonomousProxy(FCodeWriter& SourceWriter, UClass* Class)
+{
+	FFunctionSignature ReceiveUpdateSignature{ "bool", FString::Printf(TEXT("IsClientAutonomousProxy(worker::EntityId EntityId)"))};
+	SourceWriter.BeginFunction(ReceiveUpdateSignature, TypeBindingName(Class));
+
+	SourceWriter.Printf(R"""(
+		if(Interop->GetNetDriver()->GetNetMode() != NM_Client)
+		{
+			check(0);
+		}
+
+		TSharedPtr<worker::View> View = Interop->GetSpatialOS()->GetView().Pin();
+		worker::Authority Authority = View->GetAuthority<%s>(EntityId);
+
+		if(Authority == worker::Authority::kAuthoritative)
+		{
+			return true;
+		}
+
+		return false;)""",
+		*SchemaRPCComponentName(ERPCType::RPC_Client, Class, true));
+
+	SourceWriter.End();
 }
