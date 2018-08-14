@@ -297,7 +297,14 @@ void USpatialInteropPipelineBlock::ChangeAuthorityImpl(const TPair<FComponentIde
 		if(Authority == worker::Authority::kAuthoritative)
 		{
 			Actor->Role = ROLE_Authority;
-			Actor->RemoteRole = ROLE_SimulatedProxy;
+			if(Actor->GetNetConnection() != nullptr)
+			{
+				Actor->RemoteRole = ROLE_AutonomousProxy;
+			}
+			else
+			{
+				Actor->RemoteRole = ROLE_SimulatedProxy;
+			}
 		}
 		else if(Authority == worker::Authority::kNotAuthoritative)
 		{
@@ -305,15 +312,6 @@ void USpatialInteropPipelineBlock::ChangeAuthorityImpl(const TPair<FComponentIde
 			Actor->RemoteRole = ROLE_Authority;
 		}
 	}
-	//else
-	//{
-	//	USpatialTypeBinding* Binding = NetDriver->GetSpatialInterop()->GetTypeBindingByClass(Actor->GetClass());
-	//	if(Binding->IsClientAutonomousProxy(pair.Key.EntityId))
-	//	{
-	//		Actor->Role = ROLE_AutonomousProxy;
-	//		Actor->RemoteRole = ROLE_Authority;
-	//	}
-	//}
 }
 
 void USpatialInteropPipelineBlock::RemoveEntityImpl(const FEntityId& EntityId)
