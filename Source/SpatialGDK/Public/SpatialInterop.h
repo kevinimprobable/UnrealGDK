@@ -236,6 +236,10 @@ public:
 		return NetDriver;
 	}
 
+	// Type interop bindings.
+	UPROPERTY()
+	TMap<UClass*, USpatialTypeBinding*> TypeBindings;
+
 private:
 	UPROPERTY()
 	USpatialOS* SpatialOSInstance;
@@ -248,10 +252,6 @@ private:
 
 	// Timer manager.
 	FTimerManager* TimerManager;
-
-	// Type interop bindings.
-	UPROPERTY()
-	TMap<UClass*, USpatialTypeBinding*> TypeBindings;
 
 	// A map from Entity ID to actor channel.
 	TMap<FEntityId, USpatialActorChannel*> EntityToActorChannel;

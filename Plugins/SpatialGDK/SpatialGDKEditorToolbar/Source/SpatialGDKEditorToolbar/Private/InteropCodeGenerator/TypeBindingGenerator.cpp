@@ -552,6 +552,7 @@ void GenerateTypeBindingHeader(FCodeWriter& HeaderWriter, FString SchemaFilename
 		void Init(USpatialInterop* InInterop, USpatialPackageMapClient* InPackageMap) override;
 		void BindToView(bool bIsClient) override;
 		void UnbindFromView() override;
+		void ProcessQueuedUpdates() override;
 
 		worker::Entity CreateActorEntity(const FString& ClientWorkerId, const FVector& Position, const FString& Metadata, const FPropertyChangeState& InitialChanges, USpatialActorChannel* Channel) const override;
 		void SendComponentUpdates(const FPropertyChangeState& Changes, USpatialActorChannel* Channel, const FEntityId& EntityId) const override;
@@ -592,6 +593,12 @@ void GenerateTypeBindingHeader(FCodeWriter& HeaderWriter, FString SchemaFilename
 	HeaderWriter.PrintNewLine();
 	HeaderWriter.Print("FRepHandlePropertyMap RepHandleToPropertyMap;");
 	HeaderWriter.Print("FHandoverHandlePropertyMap HandoverHandleToPropertyMap;");
+	HeaderWriter.PrintNewLine();
+
+	for (EReplicatedPropertyGroup Group : GetAllReplicatedPropertyGroups())
+	{
+		HeaderWriter.Printf("TArray<TPair<worker::EntityId, %s::Update>> Queued%sUpdates;", *SchemaReplicatedDataName(Group, Class, true), *GetReplicatedPropertyGroupName(Group));
+	}
 	HeaderWriter.PrintNewLine();
 
 	for (EReplicatedPropertyGroup Group : GetAllReplicatedPropertyGroups())
@@ -747,6 +754,9 @@ void GenerateTypeBindingSource(FCodeWriter& SourceWriter, FString SchemaFilename
 
 	SourceWriter.PrintNewLine();
 	GenerateFunction_Init(SourceWriter, Class, RPCsByType, RepData, HandoverData, bIsSingleton);
+
+	SourceWriter.PrintNewLine();
+	GenerateFunction_ProcessQueuedUpdates(SourceWriter, Class);
 
 	SourceWriter.PrintNewLine();
 	GenerateFunction_BindToView(SourceWriter, Class, RPCsByType);
@@ -946,6 +956,35 @@ void GenerateFunction_Init(FCodeWriter& SourceWriter, UClass* Class, const FUnre
 	SourceWriter.End();
 }
 
+void GenerateFunction_ProcessQueuedUpdates(FCodeWriter& SourceWriter, UClass* Class)
+{
+	SourceWriter.BeginFunction({"void", "ProcessQueuedUpdates()"}, TypeBindingName(Class));
+
+	for (EReplicatedPropertyGroup Group : GetAllReplicatedPropertyGroups())
+	{
+		SourceWriter.Printf(R"""(
+for(auto& Pair : Queued%sUpdates)
+{
+	if (HasComponentAuthority(Interop->GetSpatialOS()->GetView(), Pair.Key, %s::ComponentId))
+	{
+		return;
+	}
+
+	USpatialActorChannel* ActorChannel = Interop->GetActorChannelByEntityId(Pair.Key);
+	check(ActorChannel);
+	ReceiveUpdate_%s(ActorChannel, Pair.Value);
+}
+
+Queued%sUpdates.Empty();)""",
+		*GetReplicatedPropertyGroupName(Group),
+		*SchemaReplicatedDataName(Group, Class, true),
+		*GetReplicatedPropertyGroupName(Group),
+		*GetReplicatedPropertyGroupName(Group));
+	}
+
+	SourceWriter.End();
+}
+
 void GenerateFunction_BindToView(FCodeWriter& SourceWriter, UClass* Class, const FUnrealRPCsByType& RPCsByType)
 {
 	SourceWriter.BeginFunction({"void", "BindToView(bool bIsClient)"}, TypeBindingName(Class));
@@ -970,9 +1009,11 @@ void GenerateFunction_BindToView(FCodeWriter& SourceWriter, UClass* Class, const
 				return;
 			})""", *SchemaReplicatedDataName(Group, Class, true));
 		SourceWriter.Printf(R"""(
-			USpatialActorChannel* ActorChannel = Interop->GetActorChannelByEntityId(Op.EntityId);
-			check(ActorChannel);
-			ReceiveUpdate_%s(ActorChannel, Op.Update);)""",
+			%s::Update Update(Op.Update);
+			TPair<worker::EntityId, %s::Update> Pair(Op.EntityId, Update);
+			Queued%sUpdates.Add(Pair);)""",
+			*SchemaReplicatedDataName(Group, Class, true),
+			*SchemaReplicatedDataName(Group, Class, true),
 			*GetReplicatedPropertyGroupName(Group));
 		SourceWriter.Outdent();
 		SourceWriter.Print("}));");

@@ -246,6 +246,10 @@ public:
 
 	FORCEINLINE bool IsSingleton() const { return bIsSingleton; }
 
+	virtual void ProcessQueuedUpdates() PURE_VIRTUAL(USpatialTypeBinding::ProcessQueuedUpdates(), );
+
+	//TSet<TPair<worker::EntityId, worker::ComponentId>> QueuedFirstUpdate;
+
 protected:
 	UPROPERTY()
 	USpatialInterop* Interop;

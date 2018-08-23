@@ -741,6 +741,15 @@ void USpatialNetDriver::TickDispatch(float DeltaTime)
 	{
 		SpatialOSInstance->ProcessOps();
 		SpatialOSInstance->GetEntityPipeline()->ProcessOps(SpatialOSInstance->GetView(), SpatialOSInstance->GetConnection(), GetWorld());
+
+		if(Interop != nullptr)
+		{
+			for(auto& TypeBinding : Interop->TypeBindings)
+			{
+				USpatialTypeBinding* mine = TypeBinding.Value;
+				mine->ProcessQueuedUpdates();
+			}
+		}
 	}
 }
 
@@ -910,9 +919,9 @@ USpatialNetConnection* USpatialNetDriver::AcceptNewPlayer(const FURL& InUrl, boo
 
 			// Possess the newly-spawned player.
 			NewPlayerController->NetPlayerIndex = 0;
-			NewPlayerController->Role = ROLE_Authority;
+			//NewPlayerController->Role = ROLE_Authority;
 			NewPlayerController->SetReplicates(true);
-			NewPlayerController->SetAutonomousProxy(true);
+			//NewPlayerController->SetAutonomousProxy(true);
 			NewPlayerController->SetPlayer(Connection);
 			// We explicitly don't call GameMode->PostLogin(NewPlayerController) here, to avoid the engine restarting the player.
 			// TODO: Should we call AGameSession::PostLogin?

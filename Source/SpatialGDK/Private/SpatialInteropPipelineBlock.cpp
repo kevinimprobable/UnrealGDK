@@ -289,7 +289,7 @@ void USpatialInteropPipelineBlock::ChangeAuthorityImpl(const TPair<FComponentIde
 		return;
 	}
 
-	/*if(NetDriver->IsServer())
+	if(NetDriver->IsServer())
 	{
 		TSharedPtr<worker::View> LockedView = NetDriver->GetSpatialOS()->GetView().Pin();
 		worker::Authority Authority = LockedView->GetAuthority<improbable::Position>(pair.Key.EntityId);
@@ -315,7 +315,7 @@ void USpatialInteropPipelineBlock::ChangeAuthorityImpl(const TPair<FComponentIde
 			Actor->Role = ROLE_SimulatedProxy;
 			Actor->RemoteRole = ROLE_Authority;
 		}
-	}*/
+	}
 }
 
 void USpatialInteropPipelineBlock::RemoveEntityImpl(const FEntityId& EntityId)
@@ -428,8 +428,8 @@ void USpatialInteropPipelineBlock::CreateActor(TSharedPtr<worker::Connection> Lo
 		check(NetDriver->GetSpatialInterop()->GetActorChannelByEntityId(EntityId.ToSpatialEntityId()));
 
 		// Assume SimulatedProxy until we've been delegated Authority
-		//EntityActor->Role = ROLE_SimulatedProxy;
-		//EntityActor->RemoteRole = ROLE_Authority;
+		EntityActor->Role = ROLE_SimulatedProxy;
+		EntityActor->RemoteRole = ROLE_Authority;
 	}
 	else
 	{
