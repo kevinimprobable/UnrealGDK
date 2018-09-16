@@ -102,17 +102,6 @@ void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject*
 					ApplyProperty(ComponentObject, FieldId, 0, Cmd.Property, Data, SwappedCmd.Offset, Cmd.ParentIndex);
 				}
 
-				if (Cmd.Property->GetFName() == NAME_RemoteRole)
-				{
-					// Downgrade role from AutonomousProxy to SimulatedProxy if we aren't authoritative over
-					// the client RPCs component.
-					UByteProperty* ByteProperty = Cast<UByteProperty>(Cmd.Property);
-					if (!bIsServer && !bAutonomousProxy && ByteProperty->GetPropertyValue(Data) == ROLE_AutonomousProxy)
-					{
-						ByteProperty->SetPropertyValue(Data, ROLE_SimulatedProxy);
-					}
-				}
-
 				// Parent.Property is the "root" replicated property, e.g. if a struct property was flattened
 				if (Parent.Property->HasAnyPropertyFlags(CPF_RepNotify))
 				{

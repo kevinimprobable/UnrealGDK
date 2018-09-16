@@ -124,6 +124,8 @@ private:
 	AActor* SpawnNewEntity(SpatialPosition* Position, struct SpatialRotation* Rotation, UClass* ActorClass, bool bDeferred);
 	UClass* GetNativeEntityClass(SpatialMetadata* Metadata);
 
+	void HandleActorAuthority(Worker_AuthorityChangeOp& Op);
+
 	void ApplyComponentData(Worker_EntityId EntityId, Worker_ComponentData& Data, USpatialActorChannel* Channel);
 	void ApplyComponentUpdate(const Worker_ComponentUpdate& ComponentUpdate, UObject* TargetObject, USpatialActorChannel* Channel, bool bIsHandover);
 
@@ -166,7 +168,6 @@ private:
 	TArray<Worker_EntityId> PendingAddEntities;
 	TArray<PendingAddComponentWrapper> PendingAddComponents;
 	TArray<Worker_EntityId> PendingRemoveEntities;
-
 
 	TMap<Worker_RequestId, USpatialActorChannel*> PendingActorRequests;
 };

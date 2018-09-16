@@ -62,6 +62,9 @@ void UGlobalStateManager::LinkExistingSingletonActors()
 		USpatialActorChannel* Channel = nullptr;
 		GetSingletonActorAndChannel(Pair.Key, SingletonActor, Channel);
 
+		SingletonActor->Role = ROLE_SimulatedProxy;
+		SingletonActor->RemoteRole = ROLE_Authority;
+
 		// Singleton wasn't found or channel is already set up
 		if (Channel == nullptr || Channel->Actor != nullptr)
 		{
@@ -74,7 +77,6 @@ void UGlobalStateManager::LinkExistingSingletonActors()
 
 		Channel->SetChannelActor(SingletonActor);
 
-
 		SpatialUnrealMetadata* UnrealMetadata = View->GetUnrealMetadata(SingletonEntityId);
 		if (UnrealMetadata == nullptr)
 		{
@@ -84,6 +86,7 @@ void UGlobalStateManager::LinkExistingSingletonActors()
 
 		// Since the entity already exists, we have to handle setting up the PackageMap properly for this Actor
 		NetDriver->PackageMap->ResolveEntityActor(SingletonActor, SingletonEntityId, UnrealMetadata->SubobjectNameToOffset);
+
 		UE_LOG(LogTemp, Log, TEXT("Linked Singleton Actor %s with id %d"), *SingletonActor->GetClass()->GetName(), SingletonEntityId);
 	}
 }
@@ -109,6 +112,9 @@ void UGlobalStateManager::ExecuteInitialSingletonActorReplication()
 		{
 			continue;
 		}
+
+		SingletonActor->Role = ROLE_Authority;
+		SingletonActor->RemoteRole = ROLE_SimulatedProxy;
 
 		// Set entity id of channel from the GlobalStateManager.
 		// If the id was 0, SetChannelActor will create the entity.

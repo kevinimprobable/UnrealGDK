@@ -151,10 +151,48 @@ void USpatialReceiver::OnRemoveEntity(Worker_RemoveEntityOp& Op)
 
 void USpatialReceiver::OnAuthorityChange(Worker_AuthorityChangeOp& Op)
 {
+	if (!NetDriver->IsServer())
+	{
+		return;
+	}
+
 	if (Op.component_id == SpatialConstants::GLOBAL_STATE_MANAGER_COMPONENT_ID
 		&& Op.authority == WORKER_AUTHORITY_AUTHORITATIVE)
 	{
 		GlobalStateManager->ExecuteInitialSingletonActorReplication();
+	}
+
+	if (Op.component_id == SpatialPosition::ComponentId)
+	{
+		HandleActorAuthority(Op);
+	}
+}
+
+void USpatialReceiver::HandleActorAuthority(Worker_AuthorityChangeOp& Op)
+{
+	AActor* Actor = NetDriver->GetEntityRegistry()->GetActorFromEntityId(Op.entity_id);
+
+	if (Op.authority == WORKER_AUTHORITY_AUTHORITATIVE)
+	{
+		Actor->Role = ROLE_Authority;
+		if (Actor->GetNetConnection() != nullptr)
+		{
+			Actor->RemoteRole = ROLE_AutonomousProxy;
+		}
+		// TODO: Change to see it has an APlayerController
+		else if (Cast<APawn>(Actor) != nullptr)
+		{
+			Actor->RemoteRole = ROLE_AutonomousProxy;
+		}
+		else
+		{
+			Actor->RemoteRole = ROLE_SimulatedProxy;
+		}
+	}
+	else if (Op.authority == WORKER_AUTHORITY_NOT_AUTHORITATIVE)
+	{
+		Actor->Role = ROLE_SimulatedProxy;
+		Actor->RemoteRole = ROLE_Authority;
 	}
 }
 
@@ -195,6 +233,11 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 		}
 
 		FNetworkGUID NetGUID = SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, SubobjectNameToOffset);
+
+		// Assume SimulatedProxy until we've been delegated Authority
+		EntityActor->Role = ROLE_SimulatedProxy;
+		EntityActor->RemoteRole = ROLE_Authority;
+
 		UE_LOG(LogTemp, Log, TEXT("Received create entity response op for %lld"), EntityId);
 	}
 	else
@@ -207,10 +250,10 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 		}
 
 		// Initial Singleton Actor replication is handled with USpatialInterop::LinkExistingSingletonActors
-		//if (NetDriver->IsServer() && Interop->IsSingletonClass(ActorClass))
-		//{
-		//	return;
-		//}
+		if (NetDriver->IsServer() && ActorClass->HasAnySpatialClassFlags(SPATIALCLASS_Singleton))
+		{
+			return;
+		}
 
 		UNetConnection* Connection = nullptr;
 		SpatialUnrealMetadata* UnrealMetadataComponent = GetComponentData<SpatialUnrealMetadata>(*this, EntityId);
@@ -288,6 +331,10 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 
 		// Update interest on the entity's components after receiving initial component data (so Role and RemoteRole are properly set).
 		//NetDriver->GetSpatialInterop()->SendComponentInterests(Channel, EntityId.ToSpatialEntityId());
+
+		// Assume SimulatedProxy until we're delegated Authority
+		EntityActor->Role = ROLE_SimulatedProxy;
+		EntityActor->RemoteRole = ROLE_Authority;
 
 		// This is a bit of a hack unfortunately, among the core classes only PlayerController implements this function and it requires
 		// a player index. For now we don't support split screen, so the number is always 0.
