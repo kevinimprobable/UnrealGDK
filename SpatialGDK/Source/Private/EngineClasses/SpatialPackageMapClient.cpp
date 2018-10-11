@@ -121,6 +121,7 @@ FNetworkGUID FSpatialNetGUIDCache::AssignNewEntityActorNetGUID(AActor* Actor, co
 	// Set up the NetGUID and ObjectRef for this actor.
 	FNetworkGUID NetGUID = GetOrAssignNetGUID_SpatialGDK(Actor);
 	FUnrealObjectRef ObjectRef(EntityId, 0);
+	Actor->UnrealObjectRef = ObjectRef;
 	RegisterObjectRef(NetGUID, ObjectRef);
 	UE_LOG(LogSpatialOSPackageMap, Log, TEXT("Registered new object ref for actor: %s. NetGUID: %s, entity ID: %lld"),
 		*Actor->GetName(), *NetGUID.ToString(), EntityId);
@@ -144,6 +145,7 @@ FNetworkGUID FSpatialNetGUIDCache::AssignNewEntityActorNetGUID(AActor* Actor, co
 		{
 			FNetworkGUID SubobjectNetGUID = GetOrAssignNetGUID_SpatialGDK(Subobject);
 			FUnrealObjectRef SubobjectRef(EntityId, *Offset);
+			Subobject->UnrealObjectRef = ObjectRef;
 			RegisterObjectRef(SubobjectNetGUID, SubobjectRef);
 			UE_LOG(LogSpatialOSPackageMap, Log, TEXT("Registered new object ref for subobject %s inside actor %s. NetGUID: %s, object ref: %s"),
 				*Subobject->GetName(), *Actor->GetName(), *SubobjectNetGUID.ToString(), *SubobjectRef.ToString());
