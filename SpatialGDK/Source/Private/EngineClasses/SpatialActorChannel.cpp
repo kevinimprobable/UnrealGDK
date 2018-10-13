@@ -1,4 +1,5 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+#pragma optimize("", off)
 
 #include "SpatialActorChannel.h"
 
@@ -699,3 +700,4 @@ void USpatialActorChannel::SpatialViewTick()
 		}
 	}
 }
+#pragma optimize("", on)

@@ -1,4 +1,5 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+#pragma optimize("", off)
 
 #include "SpatialReceiver.h"
 
@@ -482,7 +483,9 @@ AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable
 void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_ComponentData& Data, USpatialActorChannel* Channel)
 {
 	UClass* Class = TypebindingManager->FindClassByComponentId(Data.component_id);
-	checkf(Class, TEXT("Component %d isn't hand-written and not present in ComponentToClassMap."), Data.component_id);
+	checkf(Class, TEXT("Component %d isn't hand-written and not present in ComponentToClassMap. "
+		"Check that your Content/Spatial/SchemaDatabase.uasset file is up-to-date and included in your cooked build (if running a cloud deployment)."),
+		Data.component_id);
 
 	UObject* TargetObject = GetTargetObjectFromChannelAndClass(Channel, Class);
 	if (!TargetObject)
@@ -775,7 +778,8 @@ UObject* USpatialReceiver::GetTargetObjectFromChannelAndClass(USpatialActorChann
 
 	if (Class->IsChildOf<AActor>())
 	{
-		check(Channel->Actor->IsA(Class));
+		checkf(Channel->Actor->IsA(Class), TEXT("Object %s does not match schema class %s. Your schema likely does not match the deployment you're connected to."),
+			*Channel->Actor->GetClass()->GetName(), *Class->GetName());
 		TargetObject = Channel->Actor;
 	}
 	else
@@ -1104,3 +1108,4 @@ void USpatialReceiver::ReceiveRPCCommandRequest(const Worker_CommandRequest& Com
 
 	ApplyRPC(TargetObject, Function, PayloadData, CountBits);
 }
+#pragma optimize("", on)
